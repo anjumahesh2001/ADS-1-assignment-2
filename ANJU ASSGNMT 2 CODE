@@ -1,0 +1,241 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[4]:
+
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+def read_and_transform(filename):
+    df = pd.read_csv(filename, skiprows=4)
+    
+    # Remove unnecessary columns and any columns with 'Unnamed' in their names
+    df = df.drop(['Country Code'], axis=1)
+    df = df[df.columns.drop(list(df.filter(regex='Unnamed')))]
+    
+    # Pivot the DataFrame
+    df = df.melt(id_vars=['Country Name', 'Indicator Name', 'Indicator Code'],
+                 var_name='Year', value_name='Value')
+    df['Year'] = pd.to_datetime(df['Year'], format='%Y')
+    df = df.pivot_table(index=['Country Name', 'Year'], columns='Indicator Name', values='Value')
+    
+    df_years = df.unstack(level=0)
+    df_countries = df.unstack(level=1)
+    
+    return df_years, df_countries
+
+def explore_statistical_properties(df, indicators, countries):
+    selected_data = df.loc[countries][indicators]
+    print(selected_data.describe())
+    print(selected_data.corr())
+    print(selected_data.cov())
+
+def visualize_data(df, indicators, countries):
+    plt.figure(figsize=(15, 8))
+    for indicator in indicators:
+        for country in countries:
+            sns.lineplot(data=df.loc[country][indicator], label=f'{country} - {indicator}')
+    plt.xlabel("Year")
+    plt.ylabel("Value")
+    plt.legend()
+    plt.show()
+
+# Read and transform data
+filename = 'API_19_DS2_en_csv_v2_5312862.csv'
+df_years, df_countries = read_and_transform(filename)
+
+# Explore statistical properties
+indicators = ['CO2 emissions (metric tons per capita)', 'Access to electricity (% of population)']
+countries = ['United States', 'China', 'India']
+explore_statistical_properties(df_countries, indicators, countries)
+
+# Visualize data
+visualize_data(df_years, indicators, countries)
+
+
+# In[8]:
+
+
+
+def read_and_process(filename):
+    # Read the CSV file
+    df = pd.read_csv(filename, skiprows=4)
+    
+    # Drop unnecessary columns
+    df = df.drop(columns=['Country Code', 'Indicator Name', 'Indicator Code', 'Unnamed: 66'])
+
+    # Pivot the dataframe
+    df_years = df.melt(id_vars=['Country Name'], var_name='Year', value_name='Value')
+    df_countries = df.set_index('Country Name').transpose()
+
+    return df_years, df_countries
+
+
+# In[5]:
+
+
+df_years
+
+
+# In[6]:
+
+
+df_countries 
+
+
+# In[9]:
+
+
+# Read and process the data
+co2_data_years, co2_data_countries = read_and_process('API_19_DS2_en_csv_v2_5312862.csv')
+population_years, population_countries = read_and_process('API_SP.POP.TOTL_DS2_en_csv_v2_5358404.csv')
+
+
+# In[10]:
+
+
+
+sns.set()
+
+
+# Calculate CO2 emissions per capita
+co2_per_capita = co2_data_countries.div(population_countries)
+co2_per_capita_years = co2_data_years.merge(population_years, on=['Country Name', 'Year'], suffixes=('', '_population'))
+co2_per_capita_years['Value'] = co2_per_capita_years['Value'] / co2_per_capita_years['Value_population']
+
+# Visualization 1: CO2 Emissions per Capita by Country in 2019
+top10_emissions_per_capita = co2_per_capita.loc['2019'].sort_values(ascending=False).head(10)
+plt.figure(figsize=(12, 6))
+sns.barplot(x=top10_emissions_per_capita.index, y=top10_emissions_per_capita.values)
+plt.title('Top 10 Countries by CO2 Emissions per Capita in 2019')
+plt.ylabel('CO2 Emissions per Capita (kt)')
+plt.xticks(rotation=45)
+plt.show()
+
+
+# In[17]:
+
+
+# Visualization 2: Growth Rate of CO2 Emissions for Top 10 Countries
+top10_emissions_countries = co2_data_countries.loc['2019'].sort_values(ascending=False).head(10).index
+co2_growth_rate = co2_data_countries.loc[:, top10_emissions_countries].pct_change()
+plt.figure(figsize=(15, 15))
+sns.lineplot(data=co2_growth_rate, dashes=False)
+plt.title('Growth Rate of CO2 Emissions for Top 10 Countries (2000-2019)')
+plt.ylabel('Growth Rate')
+plt.xlabel('Year')
+plt.xticks(rotation=45)
+plt.legend(title='Country', title_fontsize='13', loc='upper right', labels=top10_emissions_countries)
+plt.show()
+
+
+# In[20]:
+
+
+selected_countries = ['United States', 'China', 'India', 'Germany', 'United Kingdom']
+renewable_energy_selected = renewable_energy_years[renewable_energy_years['Country Name'].isin(selected_countries)]
+
+access_electricity_pivot = renewable_energy_selected.pivot_table(values='Value', index='Country Name', columns='Year')
+
+plt.figure(figsize=(15, 8))
+sns.heatmap(access_electricity_pivot, annot=True, cmap='YlGnBu', fmt='.1f', linewidths=0.5)
+plt.title('Access to Renewable Energy by Selected Countries (2000-2019)')
+plt.xlabel('Year')
+plt.ylabel('Country')
+plt.show()
+
+
+# In[13]:
+
+
+# Visualization 4: Percentage Change in Renewable Energy Consumption for Selected Countries
+renewable_energy_years, renewable_energy_countries = read_and_process('API_EG.FEC.RNEW.ZS_DS2_en_csv_v2_5343795.csv')
+selected_countries = ['United States', 'China', 'India', 'Germany', 'United Kingdom']
+
+# Calculate percentage change between 2000 and 2019
+renewable_energy_change = renewable_energy_countries[selected_countries].pct_change().loc['2019'].reset_index()
+
+# Create a barplot to visualize the percentage change in renewable energy consumption
+plt.figure(figsize=(12, 6))
+sns.barplot(x='Country Name', y='2019', data=renewable_energy_change)
+plt.title('Percentage Change in Renewable Energy Consumption (2000-2019)')
+plt.xlabel('Country')
+plt.ylabel('Percentage Change')
+plt.xticks(rotation=45)
+plt.show()
+
+
+# In[21]:
+
+
+import wbdata
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import datetime
+
+sns.set()
+
+def fetch_data(indicators, countries, start_year, end_year):
+    data_date = datetime.datetime(start_year, 1, 1), datetime.datetime(end_year, 12, 31)
+    data = wbdata.get_dataframe(indicators, country=countries, data_date=data_date)
+    data.reset_index(inplace=True)
+    return data
+
+indicators = {
+    'EN.ATM.CO2E.PC': 'CO2_emissions_per_capita',
+    'AG.LND.FRST.K2': 'Forest_area',
+    'NY.GDP.MKTP.KD.ZG': 'GDP_growth'
+}
+
+countries = ['USA', 'CHN', 'IND', 'DEU', 'GBR']
+start_year, end_year = 2000, 2019
+
+
+# In[22]:
+
+
+data = fetch_data(indicators, countries, start_year, end_year)
+
+# Visualization 6: Per Capita CO2 Emissions (kt) Over Time for Selected Countries
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=data, x='date', y='CO2_emissions_per_capita', hue='country')
+plt.title('Per Capita CO2 Emissions (kt) Over Time')
+plt.xlabel('Year')
+plt.ylabel('Per Capita CO2 Emissions (kt)')
+plt.show()
+
+
+# In[24]:
+
+
+# Visualization 7: Total Forest Area (sq. km) - Violin Plot
+plt.figure(figsize=(12, 6))
+sns.violinplot(data=data, x='country', y='Forest_area', inner="quartile")
+plt.title('Total Forest Area (sq. km) for Selected Countries')
+plt.xlabel('Country')
+plt.ylabel('Total Forest Area (sq. km)')
+plt.show()
+
+
+# In[25]:
+
+
+
+# Visualization 8: GDP Growth (Annual %) - Bar Plot
+mean_gdp_growth = data.groupby('country')['GDP_growth'].mean().reset_index()
+plt.figure(figsize=(12, 6))
+sns.barplot(data=mean_gdp_growth, x='country', y='GDP_growth')
+plt.title('Average GDP Growth (Annual %) for Selected Countries (2000-2019)')
+plt.xlabel('Country')
+plt.ylabel('Average GDP Growth (Annual %)')
+plt.show()
+
+
+# In[ ]:
+
+
+
+
